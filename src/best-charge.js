@@ -1,5 +1,14 @@
+const halfPromDescription = '指定菜品半价';
+const reachPromDescription = '满30减6元';
+const noPromDescription = '不使用优惠';
 function bestCharge(selectedItems) {
-  return /*TODO*/;
+  let itemListSubtotal = subtotalCal(getItemInfo(listItem(selectedItems)));
+  let totalNoProm = totalCal(itemListSubtotal);
+  let itemListSubtotalProm;
+  let promList;
+  [itemListSubtotalProm, promList] = readProms(itemListSubtotal, totalNoProm);
+  let promSelectedIndex = promSelect(promList);
+  return printShoppingDetail(itemListSubtotalProm, promList, promSelectedIndex);
 }
 
 function listItem(selectedItems) {
@@ -38,11 +47,12 @@ function subtotalCal(itemList) {
   }, [])
 }
 
-function readProms(itemListWithSubtotal) {
-  let itemListSubtotalProm = [];
+function totalCal(itemListWithSubtotal) {
+  return itemListWithSubtotal.reduce((totalCost, currentItem) => totalCost + currentItem.subtotal, 0);
+}
+
+function readProms(itemListWithSubtotal, totalCost) {
   let promChoices = loadPromotions();
-  const halfPromDescription = '指定菜品半价';
-  const reachPromDescription = '满30减6元';
   promChoices.forEach(function (currentProm) {
     switch (currentProm.type) {
       case halfPromDescription:
@@ -54,45 +64,79 @@ function readProms(itemListWithSubtotal) {
         itemListWithSubtotal.forEach(function (currentItem) {
           currentItem.reachPrice = true;
         })
-      default: ;
+        break;
     }
   })
-  return itemListWithSubtotal;
+  promChoices.forEach(function (currentProm) {
+    switch (currentProm.type) {
+      case halfPromDescription:
+        [currentProm.total, currentProm.msg] = halfPromCal(itemListWithSubtotal, totalCost);
+        break;
+      case reachPromDescription:
+        [currentProm.total, currentProm.msg] = reachPromCal(totalCost);
+        break;
+    }
+  })
+  let noPromObj = [{
+    type: noPromDescription,
+    total: totalCost
+  }];
+  return [itemListWithSubtotal, noPromObj.concat(promChoices)];
 }
 
-let codeList = [
-  { id: 'ITEM0001', count: '1' },
-  { id: 'ITEM0013', count: '2' },
-  { id: 'ITEM0022', count: '1' }
-];
-console.log(subtotalCal(getItemInfo(codeList)));
-console.log(readProms(subtotalCal(getItemInfo(codeList))));
-
-function loadPromotions() {
-  return [{
-    type: '满30减6元'
-  }, {
-    type: '指定菜品半价',
-    items: ['ITEM0001', 'ITEM0022']
-  }];
+function halfPromCal(itemListSubtotalProm, totalCost) {
+  let halfPriceItem = [];
+  let halfPromTotal = itemListSubtotalProm.reduce(function (totalPrice, currentItem) {
+    if (currentItem.halfPrice) {
+      halfPriceItem.push(currentItem.name)
+      return totalPrice + currentItem.subtotal * 0.5;
+    }
+    else {
+      return totalPrice + currentItem.subtotal;
+    }
+  }, 0);
+  let halfPromMsg = `指定菜品半价(${halfPriceItem.join('，')})，省${totalCost - halfPromTotal}元\n`;
+  return [halfPromTotal, halfPromMsg];
 }
 
-function loadAllItems() {
-  return [{
-    id: 'ITEM0001',
-    name: '黄焖鸡',
-    price: 18.00
-  }, {
-    id: 'ITEM0013',
-    name: '肉夹馍',
-    price: 6.00
-  }, {
-    id: 'ITEM0022',
-    name: '凉皮',
-    price: 8.00
-  }, {
-    id: 'ITEM0030',
-    name: '冰锋',
-    price: 2.00
-  }];
+function reachPromCal(totalCost) {
+  let reachPromTotal;
+  if (totalCost > 30) {
+    reachPromTotal = totalCost - 6;
+  }
+  else {
+    reachPromTotal = totalCost;
+  }
+  let reachPromMsg = `满30减6元，省${totalCost - reachPromTotal}元\n`;
+  return [reachPromTotal, reachPromMsg];
+}
+
+function promSelect(promList) {
+  let promSelectedIndex = 0;
+  let minCost = promList[0].total;
+  promList.forEach(function (promChoice, index) {
+    if (promChoice.total < minCost) {
+      minCost = promChoice.total;
+      promSelectedIndex = index;
+    }
+  })
+  return promSelectedIndex;
+}
+
+function printShoppingDetail(itemListSubtotalProm, promList, promSelectedIndex) {
+  let header = '============= 订餐明细 =============\n';
+  let items = '';
+  itemListSubtotalProm.forEach(function (currentItem) {
+    let singleItem = `${currentItem.name} x ${currentItem.count} = ${currentItem.subtotal}元\n`;
+    items += singleItem;
+  })
+  let prom = '';
+  if (noPromDescription !== promList[promSelectedIndex].type) {
+    prom += '-----------------------------------\n使用优惠:\n';
+    prom += promList[promSelectedIndex].msg;
+  }
+  let sum = '-----------------------------------\n';
+  sum += `总计：${promList[promSelectedIndex].total}元\n`;
+  sum += '===================================';
+  return header + items + prom + sum;
 }
